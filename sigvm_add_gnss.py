@@ -42,6 +42,9 @@ def nmea_df_maker(gprmc_df):
 
 
 # set the root to your data folder here
+# expected folders under the data_root folder are <data_root>/adcp for adcp files
+# <data_root>/loc GPS system time files
+# <data_root>/adcp_out empty folder for the final files
 data_root = Path('/media/callum/storage/Documents/foo/adcp-car-prac-data/')
 
 # find the SigVM files and extract their start times

@@ -1,0 +1,7 @@
+name: adcp-gnss-mash
+dependencies:
+        - numpy
+        - pip
+        - pandas
+        - pip:
+        - pynmea2
