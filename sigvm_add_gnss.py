@@ -4,12 +4,13 @@ import datetime
 import pynmea2
 import numpy as np
 import shutil
+import os
 import zipfile
 
 # set the root to your data folder here. After that just run the file
 # expected folders under the data_root folder are:
-# <data_root>/adcp for adcp files
-# <data_root>/pcs Nortek PCS files
+# <data_root>/adcp for Nortek adcp files
+# <data_root>/pcs Autonaut PCS files
 # <data_root>/adcp_out empty folder for the final files
 data_root = Path('/media/callum/storage/Documents/foo/adcp-car-prac-data/')
 
@@ -25,22 +26,28 @@ def car_time_to_iso(times_in):
     return times_out, datetimes_out
 
 
+def gprmc_to_gpvtg(gprmc_str):
+    comps = gprmc_str.split(',')
+    gpvtg_str = str(pynmea2.VTG('GP', 'VTG', (comps[8], 'T', comps[8], 'M', comps[7], 'N', str(float(comps[7]) * 1.94384), 'K', 'D')))
+    return gpvtg_str
+
+
 def nmea_df_maker(gprmc_df):
     # make a dataframe of converted NMEA strings and nortek timestamps
     nmea_strs, timestamps = [], []
     for i in gprmc_df.index:
-        gprmc_str, timestamp, _ = gprmc_df.iloc[i]
-        if gprmc_str[1:6] == 'GPGGA':
-            nmea_strs.append(gprmc_str)
+        nmea_str, timestamp, _ = gprmc_df.iloc[i]
+        if nmea_str[1:6] == 'GPGGA':
+            nmea_strs.append(nmea_str)
             timestamps.append(timestamp)
-
-        elif gprmc_str[1:6] == 'PCHPR':
-            nmea_strs.append(pynmea2.HDT('HE', 'HDT', (gprmc_str.split(',')[1], 'T')))
+        elif nmea_str[1:6] =='GPRMC':
+            nmea_strs.append(gprmc_to_gpvtg(nmea_str))
+            timestamps.append(timestamp)
+        elif nmea_str[1:6] == 'PCHPR':
+            nmea_strs.append(pynmea2.HDT('HE', 'HDT', (nmea_str.split(',')[1], 'T')))
             timestamps.append(timestamp)
     nmea_df = pd.DataFrame({'NMEAs': nmea_strs, 'timestamps': timestamps}, index=None)
     return nmea_df
-
-
 
 
 # find the SigVM files and extract their start times
@@ -78,32 +85,6 @@ def path_and_times():
 
 df_paths = path_and_times()
 
-# open all the GNSS files and make a table of the location messages
-gnss_files = list((data_root / 'loc').rglob('*.dat'))
-gnss_files.sort()
-
-df_gnss = pd.DataFrame({})
-
-# Go through the location files in order
-for file in gnss_files:
-    # read in the location csvs as raw strings
-    df = pd.read_csv(file, sep=';', names=['raw_string'])
-    # Look for the GPRMC strings
-    df['gprmc_ident'] = df.raw_string.str[33:39]
-    # drop the lines that aren't $GPRMC strings
-    df = df[df['gprmc_ident'] == '$GPRMC']
-    df.drop('gprmc_ident', 1, inplace=True)
-    # extract the time stamps, NMEA strings and checksums
-    df['time_stamp'] = df.raw_string.str[:23]
-    # Asssuming UTC for caravela timestamps
-    df['time_utc'], df['datetime'] = car_time_to_iso(df.time_stamp)
-    df.drop('time_stamp', 1, inplace=True)
-    df['NMEA'] = df.raw_string.str[33:]
-    # Take just the NMEA string datetime and Nortek formatted timestamp
-    df_add = pd.DataFrame({'NMEA': df.NMEA, 'timestamp_nortek': df.time_utc, 'datetime': df.datetime}, index=None)
-    df_gnss = df_gnss.append(df_add, sort=False)
-
-df_gnss.index = np.arange(len(df_gnss))
 
 pcs_files = list((data_root / 'pcs').rglob('*_D_*'))
 df_pcs = pd.DataFrame({})
@@ -115,6 +96,7 @@ for file in pcs_files:
     df['desired'] = False
     df.loc[df['nmea_ident'] == '$GPGGA', 'desired'] = True
     df.loc[df['nmea_ident'] == '$PCHPR', 'desired'] = True
+    df.loc[df['nmea_ident'] == '$GPRMC', 'desired'] = True
     df = df[df.desired]
     df['time_stamp'] = df.raw_string.str[:15]
     df['NMEA'] = df.raw_string.str[16:]
@@ -144,10 +126,7 @@ def make_gps_files(df_nmea_msgs):
 
 make_gps_files(df_pcs)
 
-# Make zip archives including the gps file
+# Make zip archives including the gps file then rename to SigVM files
 for file_out, folder_in in zip(df_paths.file_out_paths, df_paths.folder_paths):
     shutil.make_archive(file_out, 'zip', folder_in)
-
-# Almost done! This makes zip files though. You'll need to rename to .SigVM
-# Here's a bash one liner for the job. If you're on Windows you'll have to figure something else
-# for f in *.zip; do mv -- "$f" "${f%.zip}.SigVM"; done
+    os.rename(str(file_out)+'.zip', str(file_out)+'.SigVM')
