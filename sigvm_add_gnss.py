@@ -16,11 +16,11 @@ import os
 def main():
     data_root = Path('/media/callum/storage/Documents/foo/adcp-caravela-all-proc-data/')
     # find the SigVM files and extract their start times
-    adcp_files = list((data_root / 'adcp_sub').rglob('*.SigVM'))
+    adcp_files = list((data_root / 'adcp').rglob('*.SigVM'))
     adcp_files.sort()
     df_paths = path_and_times(adcp_files)
 
-    pcs_files = list((data_root / 'pcs_sub').rglob('*_D_*'))
+    pcs_files = list((data_root / 'pcs').rglob('*_D_*'))
     df_pcs = pd.DataFrame({})
     for file in pcs_files:
         # read in the location csvs as raw strings
@@ -66,22 +66,23 @@ def nmea_df_maker(gprmc_df):
     nmea_strs, timestamps = [], []
     for i in gprmc_df.index:
         nmea_str, timestamp, _ = gprmc_df.iloc[i]
-        if nmea_str[1:6] == 'GPGGA':
-            nmea_strs.append(nmea_str)
-            timestamps.append(timestamp)
-        elif nmea_str[1:6] == 'GPRMC':
-            try:
-                pynmea2.parse(nmea_str)
+        try:
+            pynmea2.parse(nmea_str)
+            if nmea_str[1:6] == 'GPGGA':
+                nmea_strs.append(nmea_str)
+                timestamps.append(timestamp)
+            elif nmea_str[1:6] == 'GPRMC':
+
                 comps = nmea_str.split(',')
                 gpvtg_str = str(pynmea2.VTG('GP', 'VTG', (
                     comps[8], 'T', comps[8], 'M', comps[7], 'N', str(float(comps[7]) * 1.94384), 'K', 'D')))
                 nmea_strs.append(gpvtg_str)
                 timestamps.append(timestamp)
-            except:
-               print("bad gprmc string")
-        elif nmea_str[1:6] == 'PCHPR':
-            nmea_strs.append(pynmea2.HDT('HE', 'HDT', (nmea_str.split(',')[1], 'T')))
-            timestamps.append(timestamp)
+            elif nmea_str[1:6] == 'PCHPR':
+                nmea_strs.append(pynmea2.HDT('HE', 'HDT', (nmea_str.split(',')[1], 'T')))
+                timestamps.append(timestamp)
+        except:
+            print('bad nmea string skipped')
     nmea_df = pd.DataFrame({'NMEAs': nmea_strs, 'timestamps': timestamps}, index=None)
     return nmea_df
 
@@ -121,7 +122,7 @@ def make_gps_files(df_nmea_msgs, df_paths):
         df_sub = df_nmea_msgs[df_nmea_msgs.datetime > df_paths.start[i]][df_nmea_msgs.datetime < df_paths.end[i]]
         df_sub.index = np.arange(len(df_sub))
         nmea_new_format = nmea_df_maker(df_sub)
-        gps_file_path = df_paths.folder_paths[i] / (str(df_paths.folder_paths[i].parts[-1]) + '.gps')
+        gps_file_path = df_paths.folder_paths[i] / (str(df_paths.folder_paths[i].parts[-1])[:-12] + '.gps')
         nmea_new_format.to_csv(gps_file_path, sep='#', header=False, index=False, line_terminator='\r\n')
 
 
