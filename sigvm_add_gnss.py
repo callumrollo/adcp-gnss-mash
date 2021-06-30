@@ -14,7 +14,7 @@ import os
 # <data_root>/adcp_out empty folder for the final files
 
 def main():
-    data_root = Path('/media/callum/storage/Documents/foo/adcp-caravela-all-proc-data/')
+    data_root = Path('/media/callum/storage/Documents/foo/adcp-car-prac-data/')
     # find the SigVM files and extract their start times
     adcp_files = list((data_root / 'adcp').rglob('*.SigVM'))
     adcp_files.sort()
@@ -56,7 +56,8 @@ def car_time_to_iso(times_in):
     datetimes_out = []
     for time_point in times_in:
         dt_point = datetime.datetime.strptime(time_point, '%y%m%d,%H:%M:%S')
-        times_out.append(dt_point.isoformat() + '+00:00')
+        dt_point_nortek = datetime.datetime.strftime(dt_point, "%Y-%m-%d %H:%M:%S") + '.00 +00:00'
+        times_out.append(dt_point_nortek)
         datetimes_out.append(dt_point)
     return times_out, datetimes_out
 
@@ -100,15 +101,10 @@ def path_and_times(adcp_files):
         file_parts[-1] = file_parts[-1][:-6]
         adcp_file_out_paths.append(Path(*tuple(file_parts)))
         adcp_folder_paths.append(Path(path_str + '_FILES'))
-        starts.append(datetime.datetime(int(path_str[-24:-20]), int(path_str[-20:-18]), int(path_str[-18:-16]),
-                                        int(path_str[-15:-13]), int(path_str[-13:-11]), int(path_str[-11:-9])))
-        if i == len(df_path_and_times) - 1:
-            ends.append(starts[-1] + datetime.timedelta(days=1))
-        else:
-            path_str_end = str(df_path_and_times.filepath[i + 1])
-            ends.append(
-                datetime.datetime(int(path_str_end[-24:-20]), int(path_str_end[-20:-18]), int(path_str_end[-18:-16]),
-                                  int(path_str_end[-15:-13]), int(path_str_end[-13:-11]), int(path_str_end[-11:-9])))
+        start = datetime.datetime(int(path_str[-24:-20]), int(path_str[-20:-18]), int(path_str[-18:-16]),
+                                        int(path_str[-15:-13]), int(path_str[-13:-11]), int(path_str[-11:-9]))
+        starts.append(start)
+        ends.append(start + datetime.timedelta(hours=6))
     df_path_and_times['start'] = starts
     df_path_and_times['end'] = ends
     df_path_and_times['folder_paths'] = adcp_folder_paths
